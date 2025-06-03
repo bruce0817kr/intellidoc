@@ -116,6 +116,22 @@ class ResourceAlreadyExistsError(BaseIntelliDocException):
         )
 
 
+class DataProcessingError(BaseIntelliDocException):
+    """데이터 처리 오류"""
+    
+    def __init__(
+        self, 
+        message: str = "데이터 처리 중 오류가 발생했습니다.", 
+        details: Optional[Dict[str, Any]] = None
+    ):
+        super().__init__(
+            message=message,
+            error_code=ErrorCode.PROCESSING_ERROR,
+            status_code=500,
+            details=details
+        )
+
+
 class DocumentProcessingError(BaseIntelliDocException):
     """문서 처리 오류"""
     

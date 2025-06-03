@@ -17,8 +17,7 @@ from shared.database import get_db
 from shared.models import User, Document
 from shared.exceptions import ExportError, ResourceNotFoundError
 from auth.api import get_current_active_user
-from data_processor.service import DataProcessor
-from export.service import ExportManager
+from export.service import ExportService
 
 # 라우터 설정
 router = APIRouter(prefix="/export", tags=["내보내기"])
@@ -57,20 +56,15 @@ async def export_to_excel(
                 detail="이 문서에 대한 접근 권한이 없습니다."
             )
         
-        # 데이터 조회
-        data_processor = DataProcessor()
-        document_data = data_processor.get_document_data(db=db, document_id=document_id)
-        
         # 파일명 설정
         if not filename:
             filename = f"{document.original_filename.split('.')[0]}_export.xlsx"
         
         # 엑셀 내보내기
-        export_manager = ExportManager()
+        export_manager = ExportService()
         file_path = export_manager.export_to_excel(
-            data=document_data,
-            filename=filename,
-            sheet_name=sheet_name
+            db=db,
+            document_id=document_id
         )
         
         # 파일 응답
@@ -125,20 +119,15 @@ async def export_to_csv(
                 detail="이 문서에 대한 접근 권한이 없습니다."
             )
         
-        # 데이터 조회
-        data_processor = DataProcessor()
-        document_data = data_processor.get_document_data(db=db, document_id=document_id)
-        
         # 파일명 설정
         if not filename:
             filename = f"{document.original_filename.split('.')[0]}_export.csv"
         
         # CSV 내보내기
-        export_manager = ExportManager()
+        export_manager = ExportService()
         file_path = export_manager.export_to_csv(
-            data=document_data,
-            filename=filename,
-            delimiter=delimiter
+            db=db,
+            document_id=document_id
         )
         
         # 파일 응답
@@ -193,20 +182,15 @@ async def export_to_pdf(
                 detail="이 문서에 대한 접근 권한이 없습니다."
             )
         
-        # 데이터 조회
-        data_processor = DataProcessor()
-        document_data = data_processor.get_document_data(db=db, document_id=document_id)
-        
         # 파일명 설정
         if not filename:
             filename = f"{document.original_filename.split('.')[0]}_export.pdf"
         
         # PDF 내보내기
-        export_manager = ExportManager()
+        export_manager = ExportService()
         file_path = export_manager.export_to_pdf(
-            data=document_data,
-            filename=filename,
-            template=template
+            db=db,
+            document_id=document_id
         )
         
         # 파일 응답

@@ -246,5 +246,17 @@ def log_audit(user_id: Union[str, uuid.UUID], action: str, resource_type: str,
     }
     log_with_data(logging.INFO, f"AUDIT: {action} on {resource_type}", audit_data)
 
+def get_logger(name: str) -> logging.Logger:
+    """
+    이름으로 로거 인스턴스 반환
+    
+    Args:
+        name: 로거 이름
+        
+    Returns:
+        logging.Logger: 로거 인스턴스
+    """
+    return logging.getLogger(name)
+
 # 초기 로깅 설정
 setup_logging()

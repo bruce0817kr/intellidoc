@@ -24,6 +24,7 @@ class Settings:
         self.PROJECT_NAME = "IntelliDoc"
         self.API_V1_PREFIX = "/api/v1"
         self.DEBUG = self._parse_bool(os.getenv("DEBUG", "False"))
+        self.ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
         
         # 데이터베이스 설정
         self.DATABASE_URL = os.getenv(
@@ -40,6 +41,10 @@ class Settings:
         self.SECRET_KEY = os.getenv("SECRET_KEY", self._generate_secret_key())
         self.ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))
         self.REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
+        
+        # CORS 설정
+        self.ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173").split(",")
+        self.ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "*").split(",")
         
         # 파일 업로드 설정
         self.UPLOAD_DIR = os.getenv("UPLOAD_DIR", str(Path(__file__).parent.parent.parent / "uploads"))
