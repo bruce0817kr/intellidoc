@@ -1,0 +1,9 @@
+{
+  "name": "information_extraction",
+  "description": "문서에서 특정 정보 추출",
+  "template": "다음 문서에서 요청한 정보를 추출해주세요. JSON 형식으로 응답해주세요.\n\n문서 내용:\n{document_text}\n\n추출할 정보: {fields}\n\nJSON 형식으로 응답:",
+  "variables": [
+    "document_text",
+    "fields"
+  ]
+}

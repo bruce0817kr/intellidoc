@@ -1,0 +1,44 @@
+# IntelliDoc 백엔드 기본 의존성
+# 사용법: pip-compile requirements.in
+
+# 웹 프레임워크 및 ASGI 서버
+fastapi==0.115.12
+uvicorn[standard]==0.34.2
+
+# 데이터베이스 관련
+sqlalchemy==2.0.41
+psycopg2-binary==2.9.10
+alembic==1.16.1
+
+# 인증 및 보안
+python-jose[cryptography]==3.5.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.20
+
+# 비동기 작업 및 메시지 큐
+celery==5.5.2
+redis==6.2.0
+
+# 테스트
+pytest==8.3.5
+
+# OCR 및 문서 처리
+pytesseract==0.3.13
+pillow==11.2.1
+pdf2image==1.17.0
+
+# 데이터 처리 및 내보내기
+openpyxl==3.1.5
+pandas==2.2.3
+
+# API 및 데이터 검증
+pydantic==2.11.5
+
+# HTTP 요청 및 통신
+requests==2.31.0
+
+# 로깅 및 모니터링
+structlog==24.1.0
+
+# 소켓 및 실시간 통신
+websockets==11.0.0

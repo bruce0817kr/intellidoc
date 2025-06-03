@@ -1,0 +1,336 @@
+version: '3.8'
+
+# 개발용 Docker Compose 설정
+# 실시간 코드 변경 반영을 위한 볼륨 마운트 포함
+# 사용법: docker-compose -f docker-compose.dev.yml up
+
+services:
+  # PostgreSQL 데이터베이스 (개발용)
+  postgres_dev:
+    image: postgres:15
+    container_name: intellidoc_postgres_dev
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-intellidoc_dev}
+      POSTGRES_USER: ${POSTGRES_USER:-intellidoc}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-intellidoc123}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"  # 개발용 포트
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./database/init:/docker-entrypoint-initdb.d  # 초기화 스크립트
+    networks:
+      - intellidoc_dev_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-intellidoc} -d ${POSTGRES_DB:-intellidoc_dev}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis (개발용 - Celery 백엔드)
+  redis_dev:
+    image: redis:7-alpine
+    container_name: intellidoc_redis_dev
+    ports:
+      - "${REDIS_PORT:-6380}:6379"  # 개발용 포트
+    volumes:
+      - redis_dev_data:/data
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf  # 개발용 설정
+    networks:
+      - intellidoc_dev_network
+    restart: unless-stopped
+    command: redis-server /usr/local/etc/redis/redis.conf --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # IntelliDoc 백엔드 (개발용)
+  backend_dev:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev  # 개발용 Dockerfile
+      args:
+        - DEV_MODE=true
+    container_name: intellidoc_backend_dev
+    environment:
+      # 개발 모드 설정
+      ENVIRONMENT: development
+      DEBUG: "true"
+      
+      # 데이터베이스 설정
+      DATABASE_URL: postgresql://${POSTGRES_USER:-intellidoc}:${POSTGRES_PASSWORD:-intellidoc123}@postgres_dev:5432/${POSTGRES_DB:-intellidoc_dev}
+      
+      # Redis 설정
+      REDIS_URL: redis://redis_dev:6379/0
+      CELERY_BROKER_URL: redis://redis_dev:6379/0
+      CELERY_RESULT_BACKEND: redis://redis_dev:6379/0
+      
+      # OCR 엔진 설정
+      TESSERACT_LANG: ${TESSERACT_LANG:-kor+eng}
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY}
+      MISTRAL_API_URL: ${MISTRAL_API_URL:-https://api.mistral.ai/v1/chat/completions}
+      MISTRAL_MODEL: ${MISTRAL_MODEL:-pixtral-12b-2409}
+      
+      # LLM 설정
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama_dev:11434}
+      
+      # 보안 설정
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-key-change-in-production}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-jwt-secret-change-in-production}
+      
+      # 파일 업로드 설정
+      UPLOAD_DIR: /app/uploads
+      MAX_UPLOAD_SIZE: ${MAX_UPLOAD_SIZE:-10485760}  # 10MB
+      
+      # 로깅 설정
+      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
+      
+      # 배치 처리 설정
+      BATCH_WORKER_COUNT: ${BATCH_WORKER_COUNT:-2}
+      BATCH_MAX_QUEUE_SIZE: ${BATCH_MAX_QUEUE_SIZE:-100}
+      
+      # 개발용 설정
+      RELOAD: "true"
+      HOT_RELOAD: "true"
+    ports:
+      - "${BACKEND_PORT:-8001}:8000"  # 개발용 포트
+    volumes:
+      # 소스 코드 실시간 마운트
+      - ./backend:/app:rw
+      - ./backend/uploads:/app/uploads:rw
+      - ./backend/logs:/app/logs:rw
+      # Python 캐시 제외
+      - /app/__pycache__
+      - /app/*/__pycache__
+    networks:
+      - intellidoc_dev_network
+    depends_on:
+      postgres_dev:
+        condition: service_healthy
+      redis_dev:
+        condition: service_healthy
+    restart: unless-stopped
+    command: >
+      sh -c "
+        echo 'Waiting for database...' &&
+        while ! python -c 'import psycopg2; psycopg2.connect(\"$${DATABASE_URL}\")' 2>/dev/null; do
+          sleep 1
+        done &&
+        echo 'Database ready!' &&
+        python -m uvicorn web_api.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app
+      "
+
+  # Celery Worker (개발용)
+  celery_worker_dev:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+      args:
+        - DEV_MODE=true
+    container_name: intellidoc_celery_worker_dev
+    environment:
+      # 백엔드와 동일한 환경 변수
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql://${POSTGRES_USER:-intellidoc}:${POSTGRES_PASSWORD:-intellidoc123}@postgres_dev:5432/${POSTGRES_DB:-intellidoc_dev}
+      REDIS_URL: redis://redis_dev:6379/0
+      CELERY_BROKER_URL: redis://redis_dev:6379/0
+      CELERY_RESULT_BACKEND: redis://redis_dev:6379/0
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
+    volumes:
+      - ./backend:/app:rw
+      - ./backend/uploads:/app/uploads:rw
+      - ./backend/logs:/app/logs:rw
+    networks:
+      - intellidoc_dev_network
+    depends_on:
+      - postgres_dev
+      - redis_dev
+      - backend_dev
+    restart: unless-stopped
+    command: >
+      sh -c "
+        echo 'Starting Celery worker in development mode...' &&
+        celery -A web_api.celery_app worker --loglevel=debug --concurrency=2 --pool=threads
+      "
+
+  # Celery Beat Scheduler (개발용)
+  celery_beat_dev:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+      args:
+        - DEV_MODE=true
+    container_name: intellidoc_celery_beat_dev
+    environment:
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql://${POSTGRES_USER:-intellidoc}:${POSTGRES_PASSWORD:-intellidoc123}@postgres_dev:5432/${POSTGRES_DB:-intellidoc_dev}
+      REDIS_URL: redis://redis_dev:6379/0
+      CELERY_BROKER_URL: redis://redis_dev:6379/0
+      CELERY_RESULT_BACKEND: redis://redis_dev:6379/0
+      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
+    volumes:
+      - ./backend:/app:rw
+      - ./backend/logs:/app/logs:rw
+    networks:
+      - intellidoc_dev_network
+    depends_on:
+      - postgres_dev
+      - redis_dev
+    restart: unless-stopped
+    command: >
+      sh -c "
+        echo 'Starting Celery beat scheduler in development mode...' &&
+        celery -A web_api.celery_app beat --loglevel=debug --schedule=/app/celerybeat-schedule
+      "
+
+  # Flower (Celery 모니터링 - 개발용)
+  flower_dev:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+      args:
+        - DEV_MODE=true
+    container_name: intellidoc_flower_dev
+    environment:
+      CELERY_BROKER_URL: redis://redis_dev:6379/0
+      CELERY_RESULT_BACKEND: redis://redis_dev:6379/0
+      FLOWER_PORT: 5555
+      FLOWER_BASIC_AUTH: ${FLOWER_USER:-admin}:${FLOWER_PASSWORD:-admin123}
+    ports:
+      - "${FLOWER_PORT:-5556}:5555"  # 개발용 포트
+    networks:
+      - intellidoc_dev_network
+    depends_on:
+      - redis_dev
+      - celery_worker_dev
+    restart: unless-stopped
+    command: >
+      sh -c "
+        echo 'Starting Flower monitoring in development mode...' &&
+        celery -A web_api.celery_app flower --port=5555 --basic_auth=$${FLOWER_BASIC_AUTH}
+      "
+
+  # React 프론트엔드 (개발용)
+  frontend_dev:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev  # 개발용 Dockerfile
+      args:
+        - DEV_MODE=true
+    container_name: intellidoc_frontend_dev
+    environment:
+      - NODE_ENV=development
+      - VITE_API_URL=http://localhost:${BACKEND_PORT:-8001}
+      - VITE_WS_URL=ws://localhost:${BACKEND_PORT:-8001}
+      - CHOKIDAR_USEPOLLING=true  # Windows에서 파일 변경 감지
+      - WATCHPACK_POLLING=true
+    ports:
+      - "${FRONTEND_PORT:-3001}:3000"  # 개발용 포트
+    volumes:
+      # 소스 코드 실시간 마운트
+      - ./frontend:/app:rw
+      - ./frontend/node_modules:/app/node_modules:rw
+      # node_modules 캐시 최적화
+      - node_modules_cache:/app/node_modules
+    networks:
+      - intellidoc_dev_network
+    restart: unless-stopped
+    command: >
+      sh -c "
+        echo 'Installing dependencies...' &&
+        npm install &&
+        echo 'Starting React development server...' &&
+        npm run dev -- --host 0.0.0.0 --port 3000
+      "
+
+  # Ollama (로컬 LLM - 개발용, 선택사항)
+  ollama_dev:
+    image: ollama/ollama:latest
+    container_name: intellidoc_ollama_dev
+    ports:
+      - "${OLLAMA_PORT:-11435}:11434"  # 개발용 포트
+    volumes:
+      - ollama_dev_data:/root/.ollama
+    networks:
+      - intellidoc_dev_network
+    restart: unless-stopped
+    environment:
+      - OLLAMA_ORIGINS=*
+    profiles:
+      - ollama  # 선택적 서비스 (docker-compose --profile ollama up)
+
+  # Nginx (개발용 리버스 프록시)
+  nginx_dev:
+    image: nginx:alpine
+    container_name: intellidoc_nginx_dev
+    ports:
+      - "${NGINX_PORT:-8080}:80"  # 개발용 포트
+    volumes:
+      - ./nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./backend/uploads:/var/www/uploads:ro  # 정적 파일 서빙
+    networks:
+      - intellidoc_dev_network
+    depends_on:
+      - backend_dev
+      - frontend_dev
+    restart: unless-stopped
+
+  # 개발 도구: Adminer (데이터베이스 관리)
+  adminer_dev:
+    image: adminer:latest
+    container_name: intellidoc_adminer_dev
+    ports:
+      - "${ADMINER_PORT:-8082}:8080"
+    networks:
+      - intellidoc_dev_network
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres_dev
+    depends_on:
+      - postgres_dev
+    profiles:
+      - tools  # 선택적 서비스
+
+  # 개발 도구: Redis Commander (Redis 관리)
+  redis_commander_dev:
+    image: rediscommander/redis-commander:latest
+    container_name: intellidoc_redis_commander_dev
+    ports:
+      - "${REDIS_COMMANDER_PORT:-8083}:8081"
+    networks:
+      - intellidoc_dev_network
+    environment:
+      REDIS_HOSTS: local:redis_dev:6379
+      HTTP_USER: ${REDIS_COMMANDER_USER:-admin}
+      HTTP_PASSWORD: ${REDIS_COMMANDER_PASSWORD:-admin123}
+    depends_on:
+      - redis_dev
+    profiles:
+      - tools  # 선택적 서비스
+
+# 네트워크 설정
+networks:
+  intellidoc_dev_network:
+    driver: bridge
+    name: intellidoc_dev_network
+
+# 볼륨 설정
+volumes:
+  postgres_dev_data:
+    driver: local
+    name: intellidoc_postgres_dev_data
+  redis_dev_data:
+    driver: local
+    name: intellidoc_redis_dev_data
+  ollama_dev_data:
+    driver: local
+    name: intellidoc_ollama_dev_data
+  node_modules_cache:
+    driver: local
+    name: intellidoc_node_modules_cache

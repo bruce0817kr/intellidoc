@@ -1,0 +1,9 @@
+{
+  "name": "document_classification",
+  "description": "문서 유형 분류",
+  "template": "다음 문서의 유형을 분류해주세요. 가능한 문서 유형은 다음과 같습니다: {categories}\n\n문서 내용:\n{document_text}\n\n문서 유형:",
+  "variables": [
+    "document_text",
+    "categories"
+  ]
+}

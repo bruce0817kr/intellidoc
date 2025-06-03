@@ -1,0 +1,49 @@
+# IntelliDoc 프론트엔드 개발용 Dockerfile
+FROM node:18-alpine
+
+# 빌드 인수
+ARG DEV_MODE=false
+
+# 작업 디렉토리 설정
+WORKDIR /app
+
+# 개발용 도구 설치
+RUN if [ "$DEV_MODE" = "true" ]; then \
+        apk add --no-cache \
+        git \
+        vim \
+        curl \
+        bash; \
+    fi
+
+# package.json과 package-lock.json 복사
+COPY package*.json ./
+
+# Node.js 의존성 설치
+RUN npm ci
+
+# 개발용 추가 도구 설치
+RUN if [ "$DEV_MODE" = "true" ]; then \
+        npm install -g \
+        @vitejs/plugin-react \
+        eslint \
+        prettier; \
+    fi
+
+# 소스 코드 복사 (개발용 - 볼륨 마운트로 덮어씌워짐)
+COPY . .
+
+# 포트 노출
+EXPOSE 3000
+
+# 개발 환경 설정
+ENV NODE_ENV=development
+ENV CHOKIDAR_USEPOLLING=true
+ENV WATCHPACK_POLLING=true
+
+# 헬스체크
+HEALTHCHECK --interval=30s --timeout=30s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:3000 || exit 1
+
+# 개발 서버 시작
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]

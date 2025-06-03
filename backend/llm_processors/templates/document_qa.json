@@ -1,0 +1,9 @@
+{
+  "name": "document_qa",
+  "description": "문서 기반 질의응답",
+  "template": "다음 문서 내용을 바탕으로 질문에 답변해주세요.\n\n문서 내용:\n{document_text}\n\n질문: {question}\n\n답변:",
+  "variables": [
+    "document_text",
+    "question"
+  ]
+}

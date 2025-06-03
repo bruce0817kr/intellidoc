@@ -1,0 +1,8 @@
+{
+  "name": "document_summary",
+  "description": "문서 내용 요약",
+  "template": "다음 문서 내용을 간결하게 요약해주세요. 핵심 정보만 포함하고, 중요한 사실, 날짜, 이름, 금액 등을 정확히 유지해주세요.\n\n문서 내용:\n{document_text}\n\n요약:",
+  "variables": [
+    "document_text"
+  ]
+}
