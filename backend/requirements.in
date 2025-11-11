@@ -29,6 +29,14 @@ pytesseract==0.3.13
 pillow==11.2.1
 pdf2image==1.17.0
 
+# 최신 OCR 라이브러리 (2025)
+easyocr==1.7.1
+camelot-py[cv]==0.11.0
+
+# 딥러닝 프레임워크
+torch==2.1.0
+torchvision==0.16.0
+
 # 데이터 처리 및 내보내기
 openpyxl==3.1.5
 pandas==2.2.3
@@ -38,6 +46,10 @@ pydantic==2.11.5
 
 # HTTP 요청 및 통신
 requests==2.31.0
+
+# LLM 및 Vision API 클라이언트
+google-generativeai==0.8.3
+openai==1.58.1
 
 # 로깅 및 모니터링
 structlog==24.1.0
