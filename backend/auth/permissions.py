@@ -11,7 +11,7 @@ from typing import List, Dict, Any, Optional, Set, Union, Callable
 from functools import wraps
 import uuid
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from shared.models import User, Role, Permission
 from shared.constants import UserRole, PERMISSIONS
@@ -22,18 +22,23 @@ from shared.logger import log_info, log_error, log_audit
 def get_user_roles(db: Session, user_id: uuid.UUID) -> List[str]:
     """
     사용자의 역할 목록 조회
-    
+
+    N+1 쿼리 방지를 위해 joinedload 사용
+
     Args:
         db: 데이터베이스 세션
         user_id: 사용자 ID
-        
+
     Returns:
         List[str]: 역할 목록
     """
-    user = db.query(User).filter(User.id == user_id).first()
+    user = db.query(User).options(
+        joinedload(User.roles)
+    ).filter(User.id == user_id).first()
+
     if not user:
         return []
-    
+
     return [role.name for role in user.roles]
 
 

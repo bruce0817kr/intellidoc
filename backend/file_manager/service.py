@@ -16,7 +16,7 @@ import mimetypes
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple, BinaryIO
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from shared.config import settings
 from shared.models import Document, ProcessingJob
@@ -309,18 +309,24 @@ def get_user_documents(
 ) -> List[Document]:
     """
     사용자 문서 목록 조회
-    
+
+    N+1 쿼리 방지를 위해 selectinload 사용
+    - extracted_data, processing_jobs 관계를 eager loading
+
     Args:
         db: 데이터베이스 세션
         user_id: 사용자 ID
         skip: 건너뛸 개수
         limit: 최대 개수
         status: 문서 상태 필터
-        
+
     Returns:
         List[Document]: 문서 목록
     """
-    query = db.query(Document).filter(Document.uploaded_by == user_id)
+    query = db.query(Document).options(
+        selectinload(Document.extracted_data),
+        selectinload(Document.processing_jobs)
+    ).filter(Document.uploaded_by == user_id)
 
     if status:
         query = query.filter(Document.status == status)
@@ -341,16 +347,21 @@ def get_document_jobs(
 ) -> List[ProcessingJob]:
     """
     문서 작업 목록 조회
-    
+
+    N+1 쿼리 방지를 위해 joinedload 사용
+    - document 관계를 eager loading
+
     Args:
         db: 데이터베이스 세션
         document_id: 문서 ID
         job_type: 작업 유형 필터
-        
+
     Returns:
         List[ProcessingJob]: 작업 목록
     """
-    query = db.query(ProcessingJob).filter(ProcessingJob.document_id == document_id)
+    query = db.query(ProcessingJob).options(
+        joinedload(ProcessingJob.document)
+    ).filter(ProcessingJob.document_id == document_id)
 
     if job_type:
         query = query.filter(ProcessingJob.job_type == job_type)

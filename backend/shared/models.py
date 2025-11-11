@@ -77,13 +77,13 @@ class Permission(Base):
 class UserSession(Base):
     """사용자 세션 모델"""
     __tablename__ = "user_sessions"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     refresh_token = Column(String(255), nullable=False, unique=True)
     user_agent = Column(String(255), nullable=True)
     ip_address = Column(String(45), nullable=True)
-    expires_at = Column(DateTime, nullable=False)
+    expires_at = Column(DateTime, nullable=False, index=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     
     # 관계 설정
@@ -92,7 +92,7 @@ class UserSession(Base):
 class Document(Base):
     """문서 메타데이터 모델"""
     __tablename__ = "documents"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     filename = Column(String(255), nullable=False)
     original_filename = Column(String(255), nullable=False)
@@ -100,8 +100,8 @@ class Document(Base):
     file_size = Column(Integer, nullable=False)  # 바이트 단위
     file_type = Column(String(10), nullable=False)
     mime_type = Column(String(100), nullable=False)
-    status = Column(Enum(DocumentStatus), default=DocumentStatus.UPLOADED, nullable=False)
-    uploaded_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    status = Column(Enum(DocumentStatus), default=DocumentStatus.UPLOADED, nullable=False, index=True)
+    uploaded_by = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
     upload_date = Column(DateTime, default=datetime.datetime.utcnow, nullable=False)
     processed_date = Column(DateTime, nullable=True)
     page_count = Column(Integer, nullable=True)
@@ -116,9 +116,9 @@ class Document(Base):
 class ExtractedData(Base):
     """추출된 데이터 모델"""
     __tablename__ = "extracted_data"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id"), nullable=False)
+    document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id"), nullable=False, index=True)
     field_name = Column(String(100), nullable=False)
     field_value = Column(Text, nullable=True)
     field_type = Column(String(50), nullable=True)  # 문자열, 숫자, 날짜 등
@@ -135,11 +135,11 @@ class ExtractedData(Base):
 class ProcessingJob(Base):
     """처리 작업 모델"""
     __tablename__ = "processing_jobs"
-    
+
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id"), nullable=False)
-    job_type = Column(String(50), nullable=False)  # OCR, LLM, 내보내기 등
-    status = Column(Enum(JobStatus), default=JobStatus.PENDING, nullable=False)
+    document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id"), nullable=False, index=True)
+    job_type = Column(String(50), nullable=False, index=True)  # OCR, LLM, 내보내기 등
+    status = Column(Enum(JobStatus), default=JobStatus.PENDING, nullable=False, index=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
