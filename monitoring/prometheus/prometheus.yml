@@ -1,0 +1,68 @@
+# Prometheus 설정 파일
+
+global:
+  scrape_interval: 15s  # 기본 스크랩 간격
+  evaluation_interval: 15s  # 규칙 평가 간격
+  external_labels:
+    cluster: 'intellidoc'
+    environment: 'production'
+
+# Alertmanager 설정 (선택사항)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#           - alertmanager:9093
+
+# 규칙 파일 로드
+rule_files:
+  - '/etc/prometheus/rules/*.yml'
+
+# 스크랩 설정
+scrape_configs:
+  # Prometheus 자체 모니터링
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # IntelliDoc 백엔드 API
+  - job_name: 'intellidoc_backend'
+    metrics_path: '/monitoring/metrics'
+    static_configs:
+      - targets: ['backend:8000']
+        labels:
+          service: 'backend'
+          app: 'intellidoc'
+
+  # Celery Worker (Flower를 통해)
+  - job_name: 'celery_flower'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['flower:5555']
+        labels:
+          service: 'celery'
+          app: 'intellidoc'
+
+  # PostgreSQL Exporter (선택사항)
+  # - job_name: 'postgres'
+  #   static_configs:
+  #     - targets: ['postgres-exporter:9187']
+  #       labels:
+  #         service: 'database'
+  #         app: 'intellidoc'
+
+  # Redis Exporter (선택사항)
+  # - job_name: 'redis'
+  #   static_configs:
+  #     - targets: ['redis-exporter:9121']
+  #       labels:
+  #         service: 'cache'
+  #         app: 'intellidoc'
+
+  # Node Exporter (시스템 메트릭, 선택사항)
+  # - job_name: 'node'
+  #   static_configs:
+  #     - targets: ['node-exporter:9100']
+  #       labels:
+  #         service: 'system'
+  #         app: 'intellidoc'

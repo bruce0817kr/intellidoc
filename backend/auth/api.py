@@ -18,6 +18,10 @@ from shared.config import settings
 from shared.exceptions import AuthenticationError, ValidationError
 from auth.service import login, logout, refresh_access_token, change_password, get_current_user
 from shared.models import User
+from auth.schemas import (
+    LoginResponse, TokenRefreshResponse, UserInfoResponse,
+    ChangePasswordRequest, ErrorResponse
+)
 
 # OAuth2 설정
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
@@ -88,27 +92,43 @@ def get_current_active_user(
         )
 
 
-@router.post("/login", response_model=Dict[str, Any])
+@router.post(
+    "/login",
+    response_model=LoginResponse,
+    summary="사용자 로그인",
+    description="""
+    사용자 인증을 수행하고 JWT 토큰을 발급합니다.
+
+    **보안 특징:**
+    - 토큰은 HttpOnly 쿠키에 저장되어 XSS 공격으로부터 보호됩니다
+    - SameSite=Lax 설정으로 CSRF 공격을 방지합니다
+    - Access Token은 15분 유효, Refresh Token은 7일 유효합니다
+
+    **요청 형식:**
+    OAuth2 Password Flow를 사용합니다 (username, password)
+
+    **응답:**
+    - 성공 시 사용자 정보와 함께 쿠키에 토큰이 설정됩니다
+    - 이후 모든 API 요청에 쿠키가 자동으로 포함됩니다
+    """,
+    responses={
+        200: {
+            "description": "로그인 성공",
+            "model": LoginResponse
+        },
+        401: {
+            "description": "인증 실패 - 잘못된 사용자명 또는 비밀번호",
+            "model": ErrorResponse
+        }
+    }
+)
 async def login_endpoint(
     response: Response,
     request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
-    """
-    로그인 API
-
-    HttpOnly 쿠키에 토큰을 저장하여 XSS 공격으로부터 보호합니다.
-
-    Args:
-        response: HTTP 응답 객체 (쿠키 설정용)
-        request: HTTP 요청 객체
-        form_data: 로그인 폼 데이터
-        db: 데이터베이스 세션
-
-    Returns:
-        Dict[str, Any]: 사용자 정보 (토큰은 쿠키에 설정)
-    """
+    """로그인 API - HttpOnly 쿠키에 토큰을 저장하여 XSS 공격으로부터 보호합니다."""
     try:
         # 클라이언트 정보 추출
         user_agent = request.headers.get("user-agent")
@@ -161,24 +181,37 @@ async def login_endpoint(
         )
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="로그아웃",
+    description="""
+    현재 사용자를 로그아웃합니다.
+
+    **동작 방식:**
+    1. 데이터베이스에서 현재 세션을 무효화합니다
+    2. HttpOnly 쿠키에서 모든 토큰을 삭제합니다
+
+    **응답:**
+    - 성공 시 204 No Content를 반환합니다
+    """,
+    responses={
+        204: {
+            "description": "로그아웃 성공"
+        },
+        401: {
+            "description": "인증 실패 - 유효하지 않은 토큰",
+            "model": ErrorResponse
+        }
+    }
+)
 async def logout_endpoint(
     response: Response,
     refresh_token: Optional[str] = Cookie(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ) -> None:
-    """
-    로그아웃 API
-
-    쿠키에서 리프레시 토큰을 읽어 세션을 무효화하고 쿠키를 삭제합니다.
-
-    Args:
-        response: HTTP 응답 객체 (쿠키 삭제용)
-        refresh_token: 리프레시 토큰 (쿠키에서 읽음)
-        db: 데이터베이스 세션
-        current_user: 현재 사용자
-    """
+    """로그아웃 API - 세션을 무효화하고 쿠키를 삭제합니다."""
     if refresh_token:
         logout(db, refresh_token)
 
@@ -187,25 +220,39 @@ async def logout_endpoint(
     response.delete_cookie(key="refresh_token", path="/")
 
 
-@router.post("/refresh", response_model=Dict[str, Any])
+@router.post(
+    "/refresh",
+    response_model=TokenRefreshResponse,
+    summary="토큰 갱신",
+    description="""
+    만료된 Access Token을 갱신합니다.
+
+    **동작 방식:**
+    1. 쿠키에서 Refresh Token을 읽어옵니다
+    2. Refresh Token이 유효한 경우 새로운 Access Token과 Refresh Token을 발급합니다
+    3. 새로운 토큰을 HttpOnly 쿠키에 저장합니다
+
+    **보안:**
+    - Refresh Token도 함께 갱신하여 Rotation 방식으로 보안을 강화합니다
+    - 이전 Refresh Token은 자동으로 무효화됩니다
+    """,
+    responses={
+        200: {
+            "description": "토큰 갱신 성공",
+            "model": TokenRefreshResponse
+        },
+        401: {
+            "description": "인증 실패 - 유효하지 않거나 만료된 Refresh Token",
+            "model": ErrorResponse
+        }
+    }
+)
 async def refresh_token_endpoint(
     response: Response,
     refresh_token: Optional[str] = Cookie(None),
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
-    """
-    토큰 갱신 API
-
-    쿠키에서 리프레시 토큰을 읽어 새로운 액세스 토큰과 리프레시 토큰을 발급합니다.
-
-    Args:
-        response: HTTP 응답 객체 (쿠키 설정용)
-        refresh_token: 리프레시 토큰 (쿠키에서 읽음)
-        db: 데이터베이스 세션
-
-    Returns:
-        Dict[str, Any]: 토큰 갱신 성공 메시지
-    """
+    """토큰 갱신 API - 쿠키에서 리프레시 토큰을 읽어 새로운 토큰을 발급합니다."""
     try:
         if not refresh_token:
             raise HTTPException(
@@ -280,21 +327,38 @@ async def change_password_endpoint(
         )
 
 
-@router.get("/me", response_model=Dict[str, Any])
+@router.get(
+    "/me",
+    response_model=UserInfoResponse,
+    summary="현재 사용자 정보 조회",
+    description="""
+    현재 인증된 사용자의 정보를 조회합니다.
+
+    **반환 정보:**
+    - 사용자 기본 정보 (ID, username, email, full_name, department)
+    - 사용자 역할 (roles)
+    - 사용자 권한 (permissions)
+    - 계정 생성 일시
+
+    **인증 필요:**
+    - 유효한 Access Token이 쿠키에 포함되어야 합니다
+    """,
+    responses={
+        200: {
+            "description": "사용자 정보 조회 성공",
+            "model": UserInfoResponse
+        },
+        401: {
+            "description": "인증 실패 - 유효하지 않은 토큰",
+            "model": ErrorResponse
+        }
+    }
+)
 async def get_current_user_info(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
-    """
-    현재 사용자 정보 조회 API
-    
-    Args:
-        current_user: 현재 사용자
-        db: 데이터베이스 세션
-        
-    Returns:
-        Dict[str, Any]: 사용자 정보
-    """
+    """현재 사용자 정보 조회 API"""
     from auth.permissions import get_user_roles, get_user_permissions
     
     # 사용자 역할 및 권한 조회

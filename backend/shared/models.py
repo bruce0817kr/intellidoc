@@ -14,7 +14,7 @@
 
 import uuid
 import datetime
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, JSON, Text, Enum, Table
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, ForeignKey, JSON, Text, Enum, Table, Index
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -106,7 +106,12 @@ class Document(Base):
     processed_date = Column(DateTime, nullable=True)
     page_count = Column(Integer, nullable=True)
     document_metadata = Column(JSONB, nullable=True)  # 추가 메타데이터 (renamed from metadata)
-    
+
+    # 복합 인덱스 정의
+    __table_args__ = (
+        Index('idx_documents_user_status', 'uploaded_by', 'status'),  # 사용자별 상태 필터링 최적화
+    )
+
     # 관계 설정
     uploaded_by_user = relationship("User", back_populates="documents")
     extracted_data = relationship("ExtractedData", back_populates="document")
@@ -146,7 +151,13 @@ class ProcessingJob(Base):
     error_message = Column(Text, nullable=True)
     result = Column(JSONB, nullable=True)
     parameters = Column(JSONB, nullable=True)  # 작업 파라미터
-    
+
+    # 복합 인덱스 정의
+    __table_args__ = (
+        Index('idx_processing_jobs_doc_status', 'document_id', 'status'),  # 문서별 상태 조회 최적화
+        Index('idx_processing_jobs_type_status', 'job_type', 'status'),  # 작업 유형별 상태 조회 최적화
+    )
+
     # 관계 설정
     document = relationship("Document", back_populates="processing_jobs")
 

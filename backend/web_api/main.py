@@ -36,11 +36,84 @@ logger = get_logger(__name__)
 # FastAPI 애플리케이션 생성
 app = FastAPI(
     title="IntelliDoc API",
-    description="지능형 문서 처리 시스템 API",
+    description="""
+# IntelliDoc - 지능형 문서 처리 시스템 API
+
+## 개요
+IntelliDoc은 AI 기반 문서 처리 시스템으로 다음과 같은 기능을 제공합니다:
+- **문서 업로드 및 관리**: 다양한 형식의 문서 업로드 및 관리
+- **OCR 처리**: Tesseract, EasyOCR, PaddleOCR 등 다양한 OCR 엔진 지원
+- **LLM 기반 분석**: OpenAI GPT, Claude, Gemini를 활용한 문서 분석 및 데이터 추출
+- **데이터 추출 및 변환**: 구조화된 데이터 추출 및 다양한 형식으로 내보내기
+- **보안 인증**: JWT 기반 인증 및 역할 기반 접근 제어 (RBAC)
+
+## 인증
+API는 **JWT 토큰 기반 인증**을 사용합니다:
+1. `/api/v1/auth/login` 엔드포인트로 로그인
+2. 토큰은 **HttpOnly 쿠키**에 자동 저장 (XSS 방지)
+3. 이후 모든 요청에 쿠키가 자동으로 포함됨
+4. 토큰 만료 시 `/api/v1/auth/refresh`로 갱신
+
+## 보안 기능
+- **HttpOnly 쿠키**: XSS 공격 방지
+- **CSRF 보호**: SameSite 쿠키 설정
+- **MIME 타입 검증**: 파일 시그니처 기반 검증
+- **비밀번호 강도 검사**: 최소 8자, 대소문자, 숫자, 특수문자 포함
+- **환경 변수 검증**: 프로덕션 환경 보안 설정 검증
+
+## API 버전
+현재 버전: **v1**
+Base URL: `/api/v1`
+
+## 지원 파일 형식
+- **문서**: PDF, DOCX, DOC, TXT, RTF
+- **이미지**: PNG, JPEG, JPG, TIFF, BMP, GIF, WEBP
+- **스프레드시트**: XLSX, XLS, CSV
+
+## 제한 사항
+- **최대 파일 크기**: 50MB
+- **동시 처리 제한**: 사용자당 10개
+- **API 속도 제한**: 시간당 1000 요청
+    """,
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
-    openapi_url="/openapi.json"
+    openapi_url="/openapi.json",
+    contact={
+        "name": "IntelliDoc Support",
+        "url": "https://github.com/yourusername/intellidoc",
+        "email": "support@intellidoc.example.com"
+    },
+    license_info={
+        "name": "MIT License",
+        "url": "https://opensource.org/licenses/MIT"
+    },
+    openapi_tags=[
+        {
+            "name": "인증",
+            "description": "사용자 인증 및 권한 관리 API. JWT 토큰 기반 인증을 사용하며, 토큰은 HttpOnly 쿠키에 저장됩니다."
+        },
+        {
+            "name": "문서",
+            "description": "문서 업로드, 조회, 다운로드, 삭제 API. 다양한 파일 형식을 지원하며, 자동 OCR 및 데이터 추출이 가능합니다."
+        },
+        {
+            "name": "내보내기",
+            "description": "추출된 데이터를 다양한 형식(JSON, CSV, Excel, PDF)으로 내보내기"
+        },
+        {
+            "name": "OCR",
+            "description": "OCR 엔진 관리 및 문서 OCR 처리. Tesseract, EasyOCR, PaddleOCR 지원."
+        },
+        {
+            "name": "LLM",
+            "description": "LLM 기반 문서 분석 및 데이터 추출. OpenAI GPT, Claude, Gemini 지원."
+        },
+        {
+            "name": "데이터",
+            "description": "추출된 데이터 조회 및 관리. 구조화된 데이터 검색 및 필터링."
+        }
+    ]
 )
 
 # CORS 미들웨어 설정
