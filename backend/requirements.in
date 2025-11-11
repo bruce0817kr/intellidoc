@@ -21,6 +21,8 @@ redis==6.2.0
 
 # 테스트
 pytest==8.3.5
+pytest-cov==6.0.0
+pytest-asyncio==0.24.0
 
 # OCR 및 문서 처리
 pytesseract==0.3.13
@@ -39,6 +41,7 @@ requests==2.31.0
 
 # 로깅 및 모니터링
 structlog==24.1.0
+prometheus-client==0.21.0
 
 # 소켓 및 실시간 통신
 websockets==11.0.0
