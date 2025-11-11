@@ -8,23 +8,43 @@
 
 import re
 import os
-from typing import List, Dict, Any, Optional, Set, Union
+import mimetypes
+from typing import List, Dict, Any, Optional, Set, Union, BinaryIO
 from pathlib import Path
 
 from shared.constants import ALLOWED_EXTENSIONS, MIME_TYPES, KoreanConstants
 from shared.exceptions import ValidationError
 
 
+# 파일 시그니처 매핑 (Magic Bytes)
+FILE_SIGNATURES = {
+    'application/pdf': [b'%PDF-'],
+    'image/png': [b'\x89PNG\r\n\x1a\n'],
+    'image/jpeg': [b'\xff\xd8\xff'],
+    'image/gif': [b'GIF87a', b'GIF89a'],
+    'image/bmp': [b'BM'],
+    'image/tiff': [b'II*\x00', b'MM\x00*'],
+    'application/zip': [b'PK\x03\x04', b'PK\x05\x06', b'PK\x07\x08'],
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': [b'PK\x03\x04'],  # docx
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': [b'PK\x03\x04'],  # xlsx
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation': [b'PK\x03\x04'],  # pptx
+    'application/msword': [b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1'],  # doc
+    'application/vnd.ms-excel': [b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1'],  # xls
+    'text/plain': [],  # 시그니처 없음
+    'text/csv': [],  # 시그니처 없음
+}
+
+
 def validate_file_extension(filename: str) -> bool:
     """
     파일 확장자 검증
-    
+
     Args:
         filename: 검증할 파일명
-        
+
     Returns:
         bool: 유효한 확장자인 경우 True
-        
+
     Raises:
         ValidationError: 유효하지 않은 확장자인 경우
     """
@@ -34,6 +54,102 @@ def validate_file_extension(filename: str) -> bool:
             message=f"지원하지 않는 파일 형식입니다: {ext}",
             details={"allowed_extensions": list(ALLOWED_EXTENSIONS)}
         )
+    return True
+
+
+def detect_mime_type_from_content(file_content: bytes, filename: str) -> str:
+    """
+    파일 내용으로부터 MIME 타입 감지
+
+    Args:
+        file_content: 파일 내용 (최소 처음 512 바이트)
+        filename: 파일명 (fallback용)
+
+    Returns:
+        str: 감지된 MIME 타입
+    """
+    # 파일 시그니처로 MIME 타입 확인
+    for mime_type, signatures in FILE_SIGNATURES.items():
+        for signature in signatures:
+            if file_content.startswith(signature):
+                return mime_type
+
+    # 시그니처로 감지 실패 시 파일명 기반 추정
+    guessed_type, _ = mimetypes.guess_type(filename)
+    return guessed_type or 'application/octet-stream'
+
+
+def validate_mime_type(file_content: bytes, filename: str, declared_mime_type: Optional[str] = None) -> bool:
+    """
+    MIME 타입 검증 (파일 내용과 확장자 일치 여부 확인)
+
+    Args:
+        file_content: 파일 내용 (최소 처음 512 바이트)
+        filename: 파일명
+        declared_mime_type: 클라이언트가 선언한 MIME 타입 (선택)
+
+    Returns:
+        bool: 유효한 MIME 타입인 경우 True
+
+    Raises:
+        ValidationError: MIME 타입이 유효하지 않거나 불일치하는 경우
+    """
+    # 파일 내용으로부터 실제 MIME 타입 감지
+    detected_mime = detect_mime_type_from_content(file_content, filename)
+
+    # 파일 확장자로부터 예상 MIME 타입 추정
+    expected_mime, _ = mimetypes.guess_type(filename)
+
+    # 허용된 MIME 타입 목록 확인
+    allowed_mimes = set(MIME_TYPES.values())
+
+    if detected_mime not in allowed_mimes and expected_mime not in allowed_mimes:
+        raise ValidationError(
+            message=f"지원하지 않는 파일 형식입니다: {detected_mime or expected_mime}",
+            details={
+                "detected_mime_type": detected_mime,
+                "expected_mime_type": expected_mime,
+                "allowed_mime_types": list(allowed_mimes)
+            }
+        )
+
+    # 감지된 MIME 타입과 선언된 MIME 타입이 다른 경우 경고
+    if declared_mime_type and detected_mime != 'application/octet-stream':
+        # Office 파일들은 모두 ZIP 시그니처를 가지므로 특별 처리
+        office_mimes = [
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        ]
+
+        # ZIP 기반 파일이 아니고, 선언된 타입과 감지된 타입이 다른 경우
+        if declared_mime_type not in office_mimes and detected_mime not in office_mimes:
+            if declared_mime_type != detected_mime:
+                raise ValidationError(
+                    message="파일의 실제 형식이 선언된 형식과 일치하지 않습니다.",
+                    details={
+                        "declared_mime_type": declared_mime_type,
+                        "detected_mime_type": detected_mime,
+                        "reason": "mime_type_mismatch"
+                    }
+                )
+
+    # 확장자와 내용이 일치하지 않는 경우 (예: .pdf 파일인데 PNG 시그니처)
+    if expected_mime and detected_mime != 'application/octet-stream':
+        # 일반적인 불일치 감지 (Office 파일 제외)
+        if expected_mime not in office_mimes and detected_mime not in office_mimes:
+            # 확장자 기반 MIME과 감지된 MIME이 다른 경우
+            if expected_mime != detected_mime:
+                raise ValidationError(
+                    message="파일 확장자와 실제 파일 내용이 일치하지 않습니다.",
+                    details={
+                        "filename": filename,
+                        "expected_mime_type": expected_mime,
+                        "detected_mime_type": detected_mime,
+                        "reason": "extension_content_mismatch"
+                    }
+                )
+
     return True
 
 

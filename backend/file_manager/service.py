@@ -23,7 +23,7 @@ from shared.models import Document, ProcessingJob
 from shared.constants import DocumentStatus, JobStatus, FileType
 from shared.exceptions import ValidationError, ResourceNotFoundError
 from shared.utils import generate_safe_filename, is_valid_file_extension, get_file_extension, get_mime_type
-from shared.validators import validate_file_extension, validate_file_size
+from shared.validators import validate_file_extension, validate_file_size, validate_mime_type
 from shared.logger import log_info, log_error, log_audit
 
 
@@ -195,6 +195,18 @@ def upload_file(
         # 파일 유효성 검사
         validate_file_extension(original_filename)
         validate_file_size(file_size, settings.MAX_UPLOAD_SIZE)
+
+        # MIME 타입 검증 (파일 내용 읽기)
+        # 파일의 처음 512 바이트를 읽어서 MIME 타입 확인
+        file_content.seek(0)
+        file_header = file_content.read(512)
+        file_content.seek(0)  # 파일 포인터를 다시 처음으로
+
+        # 추정된 MIME 타입
+        guessed_mime, _ = mimetypes.guess_type(original_filename)
+
+        # MIME 타입 검증
+        validate_mime_type(file_header, original_filename, guessed_mime)
 
         # 업로드 디렉토리 생성
         create_upload_directories()

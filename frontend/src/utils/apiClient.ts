@@ -24,6 +24,9 @@ apiClient.interceptors.request.use(
   }
 );
 
+// 최대 재시도 횟수 (무한 루프 방지)
+const MAX_RETRY_COUNT = 1;
+
 // 응답 인터셉터 설정
 apiClient.interceptors.response.use(
   (response) => {
@@ -32,9 +35,17 @@ apiClient.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // 401 에러(인증 실패)이고 재시도하지 않은 경우
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
+    // 재시도 카운터 초기화
+    if (originalRequest._retryCount === undefined) {
+      originalRequest._retryCount = 0;
+    }
+
+    // 401 에러(인증 실패)이고 재시도 횟수가 최대값 미만인 경우
+    if (
+      error.response?.status === 401 &&
+      originalRequest._retryCount < MAX_RETRY_COUNT
+    ) {
+      originalRequest._retryCount += 1;
 
       try {
         // 리프레시 토큰으로 새 액세스 토큰 요청
@@ -56,6 +67,7 @@ apiClient.interceptors.response.use(
         // React Router 사용 시 navigate 사용 권장
         // 하지만 인터셉터에서는 window.location 사용
         window.location.href = '/login';
+        return Promise.reject(refreshError);
       }
     }
 

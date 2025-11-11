@@ -117,7 +117,10 @@ const DocumentList: React.FC = () => {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
+
+      // Blob URL 해제 (메모리 누수 방지)
+      window.URL.revokeObjectURL(url);
+
       message.success(`${filename} 파일이 다운로드되었습니다.`);
     } catch (err) {
       message.error('파일 내보내기 중 오류가 발생했습니다.');
