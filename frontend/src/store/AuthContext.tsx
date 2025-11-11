@@ -22,7 +22,7 @@ interface User {
 // 인증 컨텍스트 타입 정의
 interface AuthContextType extends AuthState {
   login: (username: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   refreshToken: () => Promise<boolean>;
 }
 
@@ -32,7 +32,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
   login: async () => {},
-  logout: () => {},
+  logout: async () => {},
   refreshToken: async () => false,
 });
 
@@ -50,31 +50,21 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     loading: true,
   });
 
-  // 컴포넌트 마운트 시 로컬 스토리지에서 토큰 확인
+  // 컴포넌트 마운트 시 쿠키에서 인증 상태 확인
   useEffect(() => {
     const checkAuth = async () => {
-      const token = localStorage.getItem('access_token');
-      
-      if (token) {
-        try {
-          // 사용자 정보 조회
-          const response = await apiClient.get('/auth/me');
-          setAuthState({
-            isAuthenticated: true,
-            user: response.data,
-            loading: false,
-          });
-        } catch (error) {
-          // 토큰이 유효하지 않은 경우
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('refresh_token');
-          setAuthState({
-            isAuthenticated: false,
-            user: null,
-            loading: false,
-          });
-        }
-      } else {
+      try {
+        // 쿠키에 토큰이 있으면 자동으로 전송됨
+        // /auth/me API를 호출하여 인증 상태 확인
+        const response = await apiClient.get('/auth/me');
+        setAuthState({
+          isAuthenticated: true,
+          user: response.data,
+          loading: false,
+        });
+      } catch (error) {
+        // 쿠키가 없거나 유효하지 않은 경우
+        // 백엔드에서 자동으로 쿠키 삭제 처리
         setAuthState({
           isAuthenticated: false,
           user: null,
@@ -89,21 +79,25 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   // 로그인 함수
   const login = async (username: string, password: string) => {
     try {
-      const response = await apiClient.post('/auth/login', {
-        username,
-        password,
+      // OAuth2PasswordRequestForm 형식으로 전송 (백엔드 요구사항)
+      const formData = new URLSearchParams();
+      formData.append('username', username);
+      formData.append('password', password);
+
+      const response = await apiClient.post('/auth/login', formData, {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
       });
 
-      const { access_token, refresh_token, ...userData } = response.data;
-      
-      // 토큰 저장
-      localStorage.setItem('access_token', access_token);
-      localStorage.setItem('refresh_token', refresh_token);
-      
+      // 토큰은 HttpOnly 쿠키로 자동 저장됨
+      // 응답에는 사용자 정보만 포함
+      const { user } = response.data;
+
       // 인증 상태 업데이트
       setAuthState({
         isAuthenticated: true,
-        user: userData,
+        user: user,
         loading: false,
       });
     } catch (error) {
@@ -112,42 +106,34 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   // 로그아웃 함수
-  const logout = () => {
-    // 토큰 제거
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    
-    // 인증 상태 업데이트
-    setAuthState({
-      isAuthenticated: false,
-      user: null,
-      loading: false,
-    });
+  const logout = async () => {
+    try {
+      // 백엔드 로그아웃 API 호출 (쿠키 삭제)
+      await apiClient.post('/auth/logout');
+    } catch (error) {
+      // 로그아웃 실패해도 프론트엔드 상태는 초기화
+      console.error('로그아웃 중 오류 발생:', error);
+    } finally {
+      // 인증 상태 초기화
+      setAuthState({
+        isAuthenticated: false,
+        user: null,
+        loading: false,
+      });
+    }
   };
 
   // 토큰 갱신 함수
   const refreshToken = async (): Promise<boolean> => {
-    const refresh = localStorage.getItem('refresh_token');
-    
-    if (!refresh) {
-      return false;
-    }
-    
     try {
-      const response = await apiClient.post('/auth/refresh', {
-        refresh_token: refresh,
-      });
-      
-      const { access_token, refresh_token } = response.data;
-      
-      // 새 토큰 저장
-      localStorage.setItem('access_token', access_token);
-      localStorage.setItem('refresh_token', refresh_token);
-      
+      // 쿠키에서 자동으로 refresh_token이 전송됨
+      await apiClient.post('/auth/refresh');
+
+      // 새 토큰이 쿠키에 자동으로 저장됨
       return true;
     } catch (error) {
       // 갱신 실패 시 로그아웃
-      logout();
+      await logout();
       return false;
     }
   };
