@@ -66,7 +66,22 @@ class Settings:
     
     def _derive_encryption_key(self, secret_key: str) -> bytes:
         """시크릿 키로부터 암호화 키 유도"""
-        salt = b'intellidoc_salt'  # 실제 운영 환경에서는 안전한 방식으로 관리해야 함
+        # 환경변수에서 솔트 로드 (없으면 랜덤 생성 후 경고)
+        salt_str = os.getenv("ENCRYPTION_SALT")
+
+        if not salt_str:
+            # 개발 환경에서만 기본값 사용, 프로덕션에서는 반드시 설정 필요
+            if self.ENVIRONMENT == "production":
+                raise ValueError(
+                    "ENCRYPTION_SALT 환경변수가 설정되지 않았습니다. "
+                    "프로덕션 환경에서는 반드시 설정해야 합니다."
+                )
+            # 개발 환경 기본값 (보안 경고)
+            salt_str = "intellidoc_dev_salt_CHANGE_THIS_IN_PRODUCTION"
+            print("⚠️  경고: ENCRYPTION_SALT가 설정되지 않아 개발용 기본값을 사용합니다.")
+
+        salt = salt_str.encode()
+
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,

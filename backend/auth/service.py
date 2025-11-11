@@ -71,15 +71,20 @@ def create_access_token(data: Dict[str, Any], expires_delta: Optional[datetime.t
         str: JWT 액세스 토큰
     """
     to_encode = data.copy()
-    
+
     if expires_delta:
         expire = datetime.datetime.utcnow() + expires_delta
     else:
         expire = datetime.datetime.utcnow() + datetime.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    
-    to_encode.update({"exp": expire})
+
+    # 토큰 타입 및 발급 시간 추가
+    to_encode.update({
+        "exp": expire,
+        "iat": datetime.datetime.utcnow(),
+        "token_type": "access"
+    })
     encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
-    
+
     return encoded_jwt
 
 
@@ -245,6 +250,14 @@ def refresh_access_token(db: Session, refresh_token: str) -> Tuple[str, str]:
         session = db.query(UserSession).filter(UserSession.refresh_token == refresh_token).first()
         if not session:
             raise AuthenticationError(message="만료되거나 유효하지 않은 세션입니다.")
+
+        # 세션 만료 시간 확인
+        if session.expires_at < datetime.datetime.utcnow():
+            log_error(f"만료된 세션 사용 시도: user_id={session.user_id}")
+            # 만료된 세션 삭제
+            db.delete(session)
+            db.commit()
+            raise AuthenticationError(message="세션이 만료되었습니다. 다시 로그인해주세요.")
         
         # 사용자 확인
         user = db.query(User).filter(User.id == user_id).first()
@@ -400,12 +413,51 @@ def login(db: Session, username: str, password: str, user_agent: Optional[str] =
 def logout(db: Session, refresh_token: str) -> None:
     """
     로그아웃 처리
-    
+
     Args:
         db: 데이터베이스 세션
         refresh_token: 리프레시 토큰
     """
     invalidate_user_session(db, refresh_token)
+
+
+def cleanup_expired_sessions(db: Session) -> int:
+    """
+    만료된 세션 정리
+
+    주기적으로 실행하여 만료된 세션을 데이터베이스에서 삭제합니다.
+    Celery Beat 스케줄러에서 호출하여 사용할 수 있습니다.
+
+    Args:
+        db: 데이터베이스 세션
+
+    Returns:
+        int: 삭제된 세션 수
+    """
+    try:
+        now = datetime.datetime.utcnow()
+
+        # 만료된 세션 조회
+        expired_sessions = db.query(UserSession).filter(
+            UserSession.expires_at < now
+        ).all()
+
+        count = len(expired_sessions)
+
+        if count > 0:
+            # 만료된 세션 삭제
+            for session in expired_sessions:
+                db.delete(session)
+
+            db.commit()
+            log_info(f"만료된 세션 {count}개 정리 완료")
+
+        return count
+
+    except Exception as e:
+        db.rollback()
+        log_error(f"세션 정리 중 오류 발생: {str(e)}")
+        raise
 
 
 class AuthService:

@@ -48,8 +48,22 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    # 명시적으로 필요한 HTTP 메서드만 허용
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    # 필요한 헤더만 명시적으로 허용
+    allow_headers=[
+        "Content-Type",
+        "Authorization",
+        "Accept",
+        "Origin",
+        "User-Agent",
+        "DNT",
+        "Cache-Control",
+        "X-Requested-With"
+    ],
+    # 추가 보안 헤더
+    expose_headers=["Content-Range", "X-Content-Range"],
+    max_age=600,  # Preflight 요청 캐시 시간 (10분)
 )
 
 # 세션 미들웨어 설정 (itsdangerous 의존성 문제로 일시적으로 비활성화)
