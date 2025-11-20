@@ -8,12 +8,17 @@ from typing import Dict, Any, Optional, List
 from enum import Enum
 from dataclasses import dataclass
 
-# 상대 import는 실제 사용 시 조정 필요
-import sys
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-
-from ocr_engines import OCREngineFactory, OCRResult
-from llm_engines import LLMEngineFactory, LLMResult
+# import 경로 처리
+try:
+    # 패키지로 설치된 경우
+    from ocr_engines import OCREngineFactory, OCRResult
+    from llm_engines import LLMEngineFactory, LLMResult
+except ImportError:
+    # 직접 실행하는 경우
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+    from ocr_engines import OCREngineFactory, OCRResult
+    from llm_engines import LLMEngineFactory, LLMResult
 
 
 class ProcessingStrategy(Enum):
